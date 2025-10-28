@@ -31,16 +31,15 @@ mod mp;
 #[cfg(feature = "smp")]
 pub use self::mp::rust_main_secondary;
 
-const LOGO: &str = r#"
-       d8888                            .d88888b.   .d8888b.
-      d88888                           d88P" "Y88b d88P  Y88b
-     d88P888                           888     888 Y88b.
-    d88P 888 888d888  .d8888b  .d88b.  888     888  "Y888b.
-   d88P  888 888P"   d88P"    d8P  Y8b 888     888     "Y88b.
-  d88P   888 888     888      88888888 888     888       "888
- d8888888888 888     Y88b.    Y8b.     Y88b. .d88P Y88b  d88P
-d88P     888 888      "Y8888P  "Y8888   "Y88888P"   "Y8888P"
-"#;
+const LOGO: &str = "\
+\x1b[31m       d8888                            .d88888b.   .d8888b.\x1b[0m\n\
+\x1b[33m      d88888                           d88P\" \"Y88b d88P  Y88b\x1b[0m\n\
+\x1b[32m     d88P888                           888     888 Y88b.\x1b[0m\n\
+\x1b[36m    d88P 888 888d888  .d8888b  .d88b.  888     888  \"Y888b.\x1b[0m\n\
+\x1b[34m   d88P  888 888P\"   d88P\"    d8P  Y8b 888     888     \"Y88b.\x1b[0m\n\
+\x1b[35m  d88P   888 888     888      88888888 888     888       \"888\x1b[0m\n\
+\x1b[91m d8888888888 888     Y88b.    Y8b.     Y88b. .d88P Y88b  d88P\x1b[0m\n\
+\x1b[95md88P     888 888      \"Y8888P  \"Y8888   \"Y88888P\"   \"Y8888P\"\x1b[0m\n";
 
 extern "C" {
     fn main();
