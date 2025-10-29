@@ -24,7 +24,9 @@ const CMD_TABLE: &[(&str, CmdHandler)] = &[
     ("help", do_help),
     ("ls", do_ls),
     ("mkdir", do_mkdir),
+    ("mv", do_mv),
     ("pwd", do_pwd),
+    ("rename", do_rename),
     ("rm", do_rm),
     ("uname", do_uname),
 ];
@@ -222,6 +224,60 @@ fn do_rm(args: &str) {
         if let Err(e) = rm_one(path, rm_dir) {
             print_err!("rm", format_args!("cannot remove '{path}'"), e);
         }
+    }
+}
+
+fn do_rename(args: &str) {
+    let mut parts = args.split_whitespace();
+    let old_path = match parts.next() {
+        Some(p) => p,
+        None => {
+            print_err!("rename", "missing source operand");
+            return;
+        }
+    };
+    let new_path = match parts.next() {
+        Some(p) => p,
+        None => {
+            print_err!("rename", "missing destination operand");
+            return;
+        }
+    };
+    
+    if parts.next().is_some() {
+        print_err!("rename", "too many arguments");
+        return;
+    }
+
+    if let Err(e) = fs::rename(old_path, new_path) {
+        print_err!("rename", format_args!("cannot rename '{}' to '{}'", old_path, new_path), e);
+    }
+}
+
+fn do_mv(args: &str) {
+    let mut parts = args.split_whitespace();
+    let old_path = match parts.next() {
+        Some(p) => p,
+        None => {
+            print_err!("mv", "missing source operand");
+            return;
+        }
+    };
+    let new_path = match parts.next() {
+        Some(p) => p,
+        None => {
+            print_err!("mv", "missing destination operand");
+            return;
+        }
+    };
+    
+    if parts.next().is_some() {
+        print_err!("mv", "too many arguments");
+        return;
+    }
+
+    if let Err(e) = fs::rename(old_path, new_path) {
+        print_err!("mv", format_args!("cannot move '{}' to '{}'", old_path, new_path), e);
     }
 }
 
