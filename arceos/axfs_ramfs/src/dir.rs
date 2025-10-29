@@ -70,6 +70,8 @@ impl DirNode {
 }
 
 impl VfsNodeOps for DirNode {
+    axfs_vfs::impl_vfs_dir_default! {}
+
     fn get_attr(&self) -> VfsResult<VfsNodeAttr> {
         Ok(VfsNodeAttr::new_dir(4096, 0))
     }
@@ -165,7 +167,81 @@ impl VfsNodeOps for DirNode {
         }
     }
 
-    axfs_vfs::impl_vfs_dir_default! {}
+    fn rename(&self, src_path: &str, dst_path: &str) -> VfsResult {
+        log::warn!("rename at ramfs: {} -> {}", src_path, dst_path);
+        
+        // Parse source path - find the parent directory of source
+        let (src_name, src_rest) = split_path(src_path);
+        if let Some(src_rest) = src_rest {
+            // Source path has subdirectories, recurse
+            match src_name {
+                "" | "." => return self.rename(src_rest, dst_path),
+                ".." => return self.parent().ok_or(VfsError::NotFound)?.rename(src_rest, dst_path),
+                _ => {
+                    let subdir = self
+                        .children
+                        .read()
+                        .get(src_name)
+                        .ok_or(VfsError::NotFound)?
+                        .clone();
+                    return subdir.rename(src_rest, dst_path);
+                }
+            }
+        }
+        
+        // Source is directly in this directory
+        if src_name.is_empty() || src_name == "." || src_name == ".." {
+            return Err(VfsError::InvalidInput);
+        }
+        
+        // Get the source node
+        let src_node = self
+            .children
+            .read()
+            .get(src_name)
+            .cloned()
+            .ok_or(VfsError::NotFound)?;
+        
+        // Parse destination path
+        let (dst_name, dst_rest) = split_path(dst_path);
+        
+        if let Some(dst_rest) = dst_rest {
+            // Destination has subdirectories
+            // Extract just the final component
+            let final_name = dst_rest.rsplit('/').next().unwrap_or(dst_rest);
+            if final_name.is_empty() || final_name == "." || final_name == ".." {
+                return Err(VfsError::InvalidInput);
+            }
+            
+            // Check if destination already exists
+            if self.exist(final_name) {
+                return Err(VfsError::AlreadyExists);
+            }
+            
+            // Perform the rename within the same directory using final name
+            let mut children = self.children.write();
+            children.remove(src_name);
+            children.insert(final_name.into(), src_node);
+            return Ok(());
+        }
+        
+        // Destination is in the same directory
+        if dst_name.is_empty() || dst_name == "." || dst_name == ".." {
+            return Err(VfsError::InvalidInput);
+        }
+        
+        // Check if destination already exists
+        if self.exist(dst_name) {
+            return Err(VfsError::AlreadyExists);
+        }
+        
+        // Perform the rename within the same directory
+        let mut children = self.children.write();
+        children.remove(src_name);
+        children.insert(dst_name.into(), src_node);
+        
+        Ok(())
+    }
 }
 
 fn split_path(path: &str) -> (&str, Option<&str>) {
