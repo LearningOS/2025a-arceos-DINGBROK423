@@ -276,7 +276,33 @@ fn do_mv(args: &str) {
         return;
     }
 
-    if let Err(e) = fs::rename(old_path, new_path) {
+    // Normalize path: remove "./" prefix and trailing "/"
+    fn normalize_path(path: &str) -> String {
+        let path = path.trim_end_matches('/');
+        if path.starts_with("./") {
+            String::from(&path[2..])
+        } else {
+            String::from(path)
+        }
+    }
+
+    let normalized_new_path = normalize_path(new_path);
+    
+    // Check if destination is a directory
+    let final_path = if let Ok(metadata) = fs::metadata(&normalized_new_path) {
+        if metadata.is_dir() {
+            // Extract filename from old_path
+            let filename = old_path.rsplit('/').next().unwrap_or(old_path);
+            // Construct new path: directory + "/" + filename
+            normalized_new_path + "/" + filename
+        } else {
+            normalized_new_path
+        }
+    } else {
+        normalized_new_path
+    };
+
+    if let Err(e) = fs::rename(old_path, &final_path) {
         print_err!("mv", format_args!("cannot move '{}' to '{}'", old_path, new_path), e);
     }
 }
