@@ -168,7 +168,7 @@ impl VfsNodeOps for DirNode {
     }
 
     fn rename(&self, src_path: &str, dst_path: &str) -> VfsResult {
-        log::warn!("rename at ramfs: {} -> {}", src_path, dst_path);
+        log::debug!("rename at ramfs: {} -> {}", src_path, dst_path);
         
         // Parse source path - find the parent directory of source
         let (src_name, src_rest) = split_path(src_path);
