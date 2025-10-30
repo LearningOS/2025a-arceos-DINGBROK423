@@ -138,9 +138,95 @@ fn sys_mmap(
     prot: i32,
     flags: i32,
     fd: i32,
-    _offset: isize,
+    offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    syscall_body!(sys_mmap, {
+        use axhal::mem::VirtAddr;
+        use axtask::current;
+        use axtask::TaskExtRef;
+        use memory_addr::{align_down_4k, align_up_4k};
+        
+        ax_println!(
+            "sys_mmap: addr={:?}, length={:#x}, prot={:#x}, flags={:#x}, fd={}, offset={:#x}",
+            addr, length, prot, flags, fd, offset
+        );
+
+        // Parse protection flags
+        let prot_flags = MmapProt::from_bits(prot).ok_or(LinuxError::EINVAL)?;
+        let mapping_flags: MappingFlags = prot_flags.into();
+        
+        // Parse mmap flags
+        let mmap_flags = MmapFlags::from_bits(flags).ok_or(LinuxError::EINVAL)?;
+        
+        // Align length to page size
+        let aligned_length = align_up_4k(length);
+        
+        // Get current task's address space
+        let curr = current();
+        let mut aspace = curr.task_ext().aspace.lock();
+        
+        // Handle anonymous mapping
+        if mmap_flags.contains(MmapFlags::MAP_ANONYMOUS) {
+            // Allocate memory without backing file
+            let start_vaddr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
+                // Let kernel choose the address
+                // Find a suitable address in user space (page-aligned)
+                let end = aspace.end().as_usize();
+                VirtAddr::from(align_down_4k(end - aligned_length))
+            } else {
+                VirtAddr::from(align_down_4k(addr as usize))
+            };
+            
+            aspace.map_alloc(start_vaddr, aligned_length, mapping_flags, true)?;
+            Ok(start_vaddr.as_usize())
+        } else {
+            // File-backed mapping
+            if fd < 0 {
+                return Err(LinuxError::EBADF);
+            }
+            
+            // Determine the virtual address for mapping
+            let start_vaddr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
+                // Let kernel choose the address - use a simple strategy
+                // Map near the end of user space (page-aligned)
+                let base = aspace.end().as_usize() - aligned_length - 0x100000; // leave some gap
+                VirtAddr::from(align_down_4k(base))
+            } else {
+                VirtAddr::from(align_down_4k(addr as usize))
+            };
+            
+            // Allocate memory first
+            aspace.map_alloc(start_vaddr, aligned_length, mapping_flags, true)?;
+            
+            // Read file content into mapped memory
+            // We need to create a buffer in kernel space first, then write to user space
+            use alloc::vec;
+            let mut kernel_buf = vec![0u8; length];
+            
+            // Use POSIX API to read file
+            drop(aspace); // Release lock before calling file API
+            
+            // Seek to the offset
+            if offset != 0 {
+                let seek_ret = api::sys_lseek(fd, offset as _, 0); // SEEK_SET = 0
+                if seek_ret < 0 {
+                    return Err(LinuxError::EIO);
+                }
+            }
+            
+            // Read file content into kernel buffer
+            let ret = api::sys_read(fd, kernel_buf.as_mut_ptr() as *mut c_void, length);
+            if ret < 0 {
+                return Err(LinuxError::EIO);
+            }
+            
+            // Now write from kernel buffer to user space
+            let aspace = curr.task_ext().aspace.lock();
+            aspace.write(start_vaddr, &kernel_buf)?;
+            
+            Ok(start_vaddr.as_usize())
+        }
+    })
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
