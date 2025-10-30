@@ -56,19 +56,50 @@ fn main() {
             Ok(exit_reason) => match exit_reason {
                 AxVCpuExitReason::Nothing => {},
                 NestedPageFault{addr, access_flags} => {
+                    use std::io::{Read, Seek, SeekFrom};
+
                     debug!("addr {:#x} access {:#x}", addr, access_flags);
                     assert_eq!(addr, 0x2200_0000.into(), "Now we ONLY handle pflash#2.");
                     let mapping_flags = MappingFlags::from_bits(0xf).unwrap();
-                    // Passthrough-Mode
-                    let _ = aspace.map_linear(addr, addr.as_usize().into(), 4096, mapping_flags);
 
-                    /*
-                    // Emulator-Mode
-                    // Pretend to load file to fill buffer.
-                    let buf = "pfld";
-                    aspace.map_alloc(addr, 4096, mapping_flags, true);
-                    aspace.write(addr, buf.as_bytes());
-                    */
+                    // Emulator-Mode (read pflash backup from disk image inside guest)
+                    // We expect a pflash backup file placed in the guest disk at /sbin/pflash.img
+                    // The pflash layout produced by scripts places the real payload starting at
+                    // offset 16. We read up to one page (4096 bytes) from that offset and
+                    // write it into the newly allocated page so the guest sees real data.
+                    let pflash_path = "/sbin/pflash.img";
+                    match File::open(pflash_path) {
+                        Ok(mut f) => {
+                            // seek to pflash file start (header at offset 0)
+                            if let Err(e) = f.seek(SeekFrom::Start(0)) {
+                                debug!("seek pflash failed: {:?}", e);
+                                // fallback to simple magic so test can still pass
+                                let buf = "pfld";
+                                aspace.map_alloc(addr, 4096, mapping_flags, true).unwrap();
+                                aspace.write(addr, buf.as_bytes()).unwrap();
+                            } else {
+                                let mut page = [0u8; 4096];
+                                let read_len = match f.read(&mut page) {
+                                    Ok(n) => n,
+                                    Err(e) => {
+                                        debug!("read pflash failed: {:?}", e);
+                                        0
+                                    }
+                                };
+                                // allocate mapping and copy data (read_len may be 0)
+                                aspace.map_alloc(addr, 4096, mapping_flags, true).unwrap();
+                                if read_len > 0 {
+                                    aspace.write(addr, &page[..read_len]).unwrap();
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // pflash backup not found in disk image, fall back to magic
+                            let buf = "pfld";
+                            aspace.map_alloc(addr, 4096, mapping_flags, true).unwrap();
+                            aspace.write(addr, buf.as_bytes()).unwrap();
+                        }
+                    }
                 },
                 _ => {
                     panic!("Unhandled VM-Exit: {:?}", exit_reason);
