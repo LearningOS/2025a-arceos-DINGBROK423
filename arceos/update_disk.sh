@@ -20,7 +20,8 @@ fi
 printf "Write file '$FILE' into disk.img\n"
 
 # Try to use mount first, fallback to mtools if mount fails
-if mkdir -p ./mnt && sudo mount ./disk.img ./mnt 2>/dev/null; then
+mkdir -p ./mnt
+if sudo mount ./disk.img ./mnt 2>/dev/null && mountpoint -q ./mnt 2>/dev/null; then
     # Mount succeeded, use traditional method
     sudo mkdir -p ./mnt/sbin
     sudo cp $FILE ./mnt/sbin
@@ -30,6 +31,7 @@ if mkdir -p ./mnt && sudo mount ./disk.img ./mnt 2>/dev/null; then
 else
     # Mount failed (no loop device), use mtools instead
     printf "Mount failed, using mtools instead...\n"
+    sudo umount ./mnt 2>/dev/null || true
     rm -rf mnt
     # Create /sbin directory if it doesn't exist
     mmd -i disk.img ::/sbin 2>/dev/null || true
