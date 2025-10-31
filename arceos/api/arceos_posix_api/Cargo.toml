@@ -53,3 +53,4 @@ lazy_static = { version = "1.5", features = ["spin_no_std"] }
 
 [build-dependencies]
 bindgen ={ version = "0.69" }
+home = "=0.5.11"

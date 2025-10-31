@@ -13,7 +13,7 @@ make pflash_img
 make disk_img
 
 
-make run A=exercises/support_hashmap/ 2>/dev/null | tee $tmp_file
+make run A=exercises/support_hashmap/ | tee $tmp_file
 
 output=$(tail -n1 ./$tmp_file | grep -a "$grep_content")
 

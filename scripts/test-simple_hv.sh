@@ -15,7 +15,7 @@ make disk_img
 make payload
 ./update_disk.sh payload/skernel2/skernel2
 
-make run A=exercises/simple_hv/ BLK=y 2>/dev/null | tee $tmp_file
+make run A=exercises/simple_hv/ BLK=y | tee $tmp_file
 
 output=$(grep -a "$grep_content" $tmp_file | tail -n1  )
 
