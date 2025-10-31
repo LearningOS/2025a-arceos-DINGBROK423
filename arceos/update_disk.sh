@@ -24,8 +24,10 @@ mkdir -p ./mnt
 if sudo mount ./disk.img ./mnt 2>/dev/null && mountpoint -q ./mnt 2>/dev/null; then
     # Mount succeeded, use traditional method
     sudo mkdir -p ./mnt/sbin
-    sudo cp $FILE ./mnt/sbin
+    sudo cp "$FILE" ./mnt/sbin
+    sync
     sudo umount ./mnt
+    sync
     rm -rf mnt
     printf "Successfully copied using mount\n"
 else
