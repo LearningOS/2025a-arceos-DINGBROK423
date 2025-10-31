@@ -170,7 +170,6 @@ fn sys_mmap(
             // Allocate memory without backing file
             let start_vaddr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
                 // Let kernel choose the address
-                // Find a suitable address in user space (page-aligned)
                 let end = aspace.end().as_usize();
                 VirtAddr::from(align_down_4k(end - aligned_length))
             } else {
@@ -187,42 +186,46 @@ fn sys_mmap(
             
             // Determine the virtual address for mapping
             let start_vaddr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
-                // Let kernel choose the address - use a simple strategy
-                // Map near the end of user space (page-aligned)
-                let base = aspace.end().as_usize() - aligned_length - 0x100000; // leave some gap
+                // Let kernel choose the address
+                let base = aspace.end().as_usize() - aligned_length - 0x100000;
                 VirtAddr::from(align_down_4k(base))
             } else {
                 VirtAddr::from(align_down_4k(addr as usize))
             };
             
-            // Allocate memory first
+            // Allocate and map memory
             aspace.map_alloc(start_vaddr, aligned_length, mapping_flags, true)?;
             
-            // Read file content into mapped memory
-            // We need to create a buffer in kernel space first, then write to user space
+            // Release lock before file operations
+            drop(aspace);
+            
+            // Read file content into kernel buffer
             use alloc::vec;
             let mut kernel_buf = vec![0u8; length];
             
-            // Use POSIX API to read file
-            drop(aspace); // Release lock before calling file API
-            
-            // Seek to the offset
+            // Seek to offset if needed
             if offset != 0 {
                 let seek_ret = api::sys_lseek(fd, offset as _, 0); // SEEK_SET = 0
                 if seek_ret < 0 {
+                    ax_println!("sys_mmap: lseek failed, ret={}", seek_ret);
                     return Err(LinuxError::EIO);
                 }
             }
             
-            // Read file content into kernel buffer
-            let ret = api::sys_read(fd, kernel_buf.as_mut_ptr() as *mut c_void, length);
-            if ret < 0 {
+            // Read file content
+            let bytes_read = api::sys_read(fd, kernel_buf.as_mut_ptr() as *mut c_void, length);
+            if bytes_read < 0 {
+                ax_println!("sys_mmap: read failed, ret={}", bytes_read);
                 return Err(LinuxError::EIO);
             }
             
-            // Now write from kernel buffer to user space
+            ax_println!("sys_mmap: read {} bytes from file", bytes_read);
+            
+            // Write data to user space (only the bytes actually read)
             let aspace = curr.task_ext().aspace.lock();
-            aspace.write(start_vaddr, &kernel_buf)?;
+            if bytes_read > 0 {
+                aspace.write(start_vaddr, &kernel_buf[..bytes_read as usize])?;
+            }
             
             Ok(start_vaddr.as_usize())
         }
