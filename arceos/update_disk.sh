@@ -31,7 +31,7 @@ if sudo mount ./disk.img ./mnt 2>/dev/null && mountpoint -q ./mnt 2>/dev/null; t
     rm -rf mnt
     printf "Successfully copied using mount\n"
 else
-    # Mount failed (no loop device), use mtools instead
+    # Mount failed (no loop device), use mtools instead (local test)
     printf "Mount failed, using mtools instead...\n"
     sudo umount ./mnt 2>/dev/null || true
     rm -rf mnt
